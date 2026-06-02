@@ -2,7 +2,7 @@ use crate::{get_source_url, open_external, set_source_url};
 use discord_rich_presence::{DiscordIpc, DiscordIpcClient};
 use serde_json::json;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{PathBuf, Path};
 use std::sync::Mutex;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::image::Image;
@@ -30,7 +30,7 @@ struct DownloadState {
 // Helpers
 // ---------------------------------------------------------------------------
 
-fn save_download_path(app: &AppHandle, path: &PathBuf) {
+fn save_download_path(app: &AppHandle, path: &Path) {
     if let Ok(config_dir) = app.path().app_config_dir() {
         if !config_dir.exists() {
             let _ = fs::create_dir_all(&config_dir);
@@ -363,9 +363,9 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         "../scripts/desktop/discord_presence_bridge.js"
     ));
     init_script.push('\n');
-    init_script.push_str(include_str!("../scripts/mobile/external_link_router.js"));
+    init_script.push_str(include_str!("../scripts/desktop/external_link_router.js"));
     init_script.push('\n');
-    let fallback_script = include_str!("../scripts/mobile/source_url_fallback.js")
+    let fallback_script = include_str!("../scripts/desktop/source_url_fallback.js")
         .replace("__EXPECTED_URL__", &source_url)
         .replace("__DEFAULT_URL__", crate::DEFAULT_SOURCE_URL);
     init_script.push_str(&fallback_script);

@@ -68,44 +68,22 @@ fn open_external(app: AppHandle, url: String) -> Result<(), String> {
 #[cfg(desktop)]
 mod desktop;
 
-#[cfg(mobile)]
-mod mobile;
-
-#[cfg(target_os = "android")]
-mod android_download;
-
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default()
-        .plugin(tauri_plugin_shell::init())
-        .plugin(tauri_plugin_media_toolkit::init())
         .plugin(
             tauri_plugin_opener::Builder::new()
                 .open_js_links_on_click(false)
                 .build(),
         )
-        .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_google_auth::init());
-
-    #[cfg(target_os = "android")]
-    let builder = builder.plugin(tauri_plugin_safe_area_insets::init());
-
-    #[cfg(mobile)]
-    let builder = builder.plugin(tauri_plugin_media_session::init());
 
     #[cfg(desktop)]
     let builder = desktop::configure(builder);
-
-    #[cfg(mobile)]
-    let builder = mobile::configure(builder);
 
     builder
         .setup(|app| {
             #[cfg(desktop)]
             desktop::setup(app)?;
-
-            #[cfg(mobile)]
-            mobile::setup(app)?;
 
             Ok(())
         })

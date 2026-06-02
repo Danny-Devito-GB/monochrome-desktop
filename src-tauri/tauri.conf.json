@@ -5,7 +5,7 @@
   "build": {
     "beforeDevCommand": "",
     "beforeBuildCommand": "",
-    "devUrl": "https://monochrome.tf",
+    "devUrl": "https://monochrome.tf/library",
     "frontendDist": "dist"
   },
   "bundle": {
@@ -13,11 +13,7 @@
     "icon": [
       "icons/icon.png",
       "icons/icon.ico"
-    ],
-    "iOS": {
-      "minimumSystemVersion": "16.0",
-      "infoPlist": "Info.ios.plist"
-    }
+    ]
   },
   "app": {
     "withGlobalTauri": true,
@@ -25,14 +21,8 @@
       "csp": null,
       "capabilities": [
         "main-capability",
-        "desktop-capability",
-        "mobile-capability"
+        "desktop-capability"
       ]
-    }
-  },
-  "plugins": {
-    "shell": {
-      "open": true
     }
   }
 }

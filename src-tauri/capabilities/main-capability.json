@@ -7,7 +7,6 @@
     "core:event:default",
     "open-external",
     "source-url",
-    "shell:allow-open",
     "google-auth:default",
     "discord-presence"
   ],

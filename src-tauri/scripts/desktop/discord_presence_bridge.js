@@ -1,38 +1,8 @@
-(function() {
+(function () {
     if (window.discordRpcInjected) {
         return;
     }
     window.discordRpcInjected = true;
-
-    const originalOpen = window.open;
-    const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent);
-    window.open = function(url, target, features) {
-        const urlStr = String(url || '');
-        const isExternalAuth = urlStr.includes('last.fm') ||
-                               urlStr.includes('spotify.com') ||
-                               urlStr.includes('google.com') ||
-                               urlStr.includes('discord.com') ||
-                               urlStr.includes('monochrome-database.firebaseapp.com');
-
-        if (isExternalAuth) {
-            if (isMobile) {
-                return originalOpen.apply(window, arguments);
-            }
-            if (window.__TAURI__?.shell) {
-                window.__TAURI__.shell.open(urlStr);
-            }
-            return {
-                close: () => {},
-                focus: () => {},
-                blur: () => {},
-                postMessage: () => {},
-                closed: false,
-                location: { href: urlStr }
-            };
-        }
-
-        return originalOpen.apply(window, arguments);
-    };
 
     document.addEventListener('contextmenu', e => e.preventDefault());
     let debounceTimer;
@@ -43,9 +13,6 @@
     function invoke(cmd, args) {
         if (window.__TAURI__?.core?.invoke) {
             return window.__TAURI__.core.invoke(cmd, args);
-        }
-        if (window.__TAURI__?.tauri?.invoke) {
-            return window.__TAURI__.tauri.invoke(cmd, args);
         }
         return Promise.reject("Tauri API not found");
     }
@@ -92,7 +59,7 @@
             // No track in queue - clear RPC
             if (Object.keys(lastState).length > 0) {
                 lastState = {};
-                invoke('clear_discord_presence', {}).catch(() => {});
+                invoke('clear_discord_presence', {}).catch(() => { });
             }
             return;
         }
@@ -108,7 +75,7 @@
         const title = currentTrack.title || 'Unknown Track';
         const artistName = currentTrack.artists?.[0]?.name || currentTrack.artist?.name || 'Unknown Artist';
         const albumName = currentTrack.album?.title || '';
-        
+
         // Extract year from release date
         const releaseDate = currentTrack.album?.releaseDate || currentTrack?.streamStartDate || '';
         const yearMatch = releaseDate.match(/^(\d{4})/);
@@ -118,9 +85,9 @@
         let image = 'logo';
         const coverEl = document.querySelector('.now-playing-bar img.cover');
         if (coverEl && coverEl.src && coverEl.src.startsWith('http') && coverEl.src.length < 256) {
-                image = coverEl.src;
+            image = coverEl.src;
         }
-        else if (isLocal) {image = 'local';}
+        else if (isLocal) { image = 'local'; }
 
 
         // Build URLs only for non-local files
@@ -146,7 +113,7 @@
         // Only update if track changed or play/pause state changed
         const trackChanged = lastState.trackId !== currentState.trackId;
         const playStateChanged = lastState.isPaused !== currentState.isPaused;
-        
+
         if (!force && !trackChanged && !playStateChanged) {
             return;
         }
@@ -158,7 +125,7 @@
             // Re-read current time to account for any playback during debounce
             const finalCurrentSec = audioEl.currentTime || 0;
             const finalTotalSec = audioEl.duration || 0;
-            
+
             const payload = {
                 title: title,
                 artist: artistName,
@@ -173,14 +140,14 @@
                 artistUrl: artistUrl,
                 albumUrl: albumUrl
             };
-            
+
             // Debug logging
             if (window.__DISCORD_RPC_DEBUG__) {
                 console.log('[Discord RPC] Sending payload:', JSON.stringify(payload, null, 2));
             }
-            
-            invoke('update_discord_presence', payload).catch(() => {});
-            
+
+            invoke('update_discord_presence', payload).catch(() => { });
+
             // Store the time we sent this update
             lastAudioTime = finalCurrentSec;
             lastUpdateTime = Date.now();
@@ -194,11 +161,11 @@
 
         const currentTime = audioEl.currentTime || 0;
         const timeSinceLastUpdate = (Date.now() - lastUpdateTime) / 1000;
-        
+
         // If audio time has drifted more than 2 seconds from expected position, resync
         const expectedTime = lastAudioTime + timeSinceLastUpdate;
         const drift = Math.abs(currentTime - expectedTime);
-        
+
         if (drift > 2.0) {
             if (window.__DISCORD_RPC_DEBUG__) {
                 console.log(`[Discord RPC] Time drift detected: ${drift.toFixed(1)}s - resyncing`);
@@ -207,8 +174,6 @@
         }
     }
 
-    let observer = null;
-    
     function attachAudioListeners() {
         const audio = document.getElementById('audio-player');
         if (audio && !audio.dataset.rpcAttached) {
@@ -237,7 +202,7 @@
                 // Queue changed - update immediately
                 updateRPC(true);
             }
-        } catch (e) {}
+        } catch (e) { }
     }
 
     function initializeWatcher() {
@@ -245,28 +210,24 @@
         checkQueueChanges();
         updateRPC(false);
     }
-    
-    function tryInit() {
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initializeWatcher);
+    } else {
         initializeWatcher();
     }
-    
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', tryInit);
-    } else {
-        tryInit();
-    }
-    
+
     // Check for queue changes every 2 seconds
     setInterval(checkQueueChanges, 2000);
-    
+
     // Check for time drift every 5 seconds
     setInterval(syncRPCTime, 5000);
-    
+
     // Re-init periodically as fallback
-    setInterval(tryInit, 10000);
-    
+    setInterval(initializeWatcher, 10000);
+
     // Global function to toggle debug mode
-    window.toggleDiscordRPCDebug = function() {
+    window.toggleDiscordRPCDebug = function () {
         window.__DISCORD_RPC_DEBUG__ = !window.__DISCORD_RPC_DEBUG__;
         console.log('[Discord RPC] Debug mode:', window.__DISCORD_RPC_DEBUG__ ? 'ENABLED' : 'DISABLED');
         if (window.__DISCORD_RPC_DEBUG__) {
@@ -276,9 +237,9 @@
         }
         return window.__DISCORD_RPC_DEBUG__;
     };
-    
+
     // Global function to force RPC update
-    window.forceDiscordRPCUpdate = function() {
+    window.forceDiscordRPCUpdate = function () {
         console.log('[Discord RPC] Forcing update...');
         updateRPC(true);
         return 'Update triggered';
