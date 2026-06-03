@@ -1,11 +1,11 @@
 {
   "productName": "Monochrome",
-  "version": "0.1.0",
-  "identifier": "com.monochrome.music.blacksigkill",
+  "version": "1.0.0",
+  "identifier": "com.monochrome.music",
   "build": {
     "beforeDevCommand": "",
     "beforeBuildCommand": "",
-    "devUrl": "https://monochrome.tf/library",
+    "devUrl": "https://monochrome.tf",
     "frontendDist": "dist"
   },
   "bundle": {

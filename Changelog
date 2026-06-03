@@ -1,0 +1,30 @@
+# Changelog
+
+All notable changes to Monochrome will be documented here.
+
+Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)  
+Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
+
+---
+
+## [Unreleased]
+
+---
+
+## [1.0.0] — 2026
+
+### Added
+- Initial release of Monochrome desktop client for Windows
+- Tauri v2 wrapper for [monochrome.tf](https://monochrome.tf) with WebView2
+- Discord Rich Presence — track title, artist, album art, playback timestamps, and clickable URLs
+- Media key support (play/pause via `MediaPlayPause` global shortcut)
+- System tray with show/hide, set download folder, and quit actions
+- Desktop notifications for track changes when the window is unfocused
+- Single-instance enforcement — re-focuses existing window on relaunch
+- Custom source URL fallback screen for self-hosted or local dev instances
+- Persistent download folder preference saved to app config directory
+- Persistent window size and position via `tauri-plugin-window-state`
+- Google OAuth via `tauri-plugin-google-auth`
+- External link router — opens `_blank` and off-origin links in the system browser
+- Windows installer bundles: `.msi` (WiX) and `.exe` (NSIS)
+- GitHub Actions CI workflow for automated Windows builds and draft releases
