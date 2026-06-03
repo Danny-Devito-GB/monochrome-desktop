@@ -5,10 +5,14 @@
     window.discordRpcInjected = true;
 
     document.addEventListener('contextmenu', e => e.preventDefault());
-    let debounceTimer;
+
+    let pendingTimer = null;   // holds a queued-but-not-yet-sent update
+    let lastSentTime = 0;      // wall-clock ms of the last successful send
+    let lastAudioTime = 0;      // audio position at last send (for drift detection)
+    let lastUpdateTime = 0;     // alias kept for syncRPCTime compatibility
     let lastState = {};
-    let lastAudioTime = 0;
-    let lastUpdateTime = 0;
+
+    const MIN_UPDATE_INTERVAL_MS = 10000; // Minimum time between updates to avoid hitting rate limits
 
     function invoke(cmd, args) {
         if (window.__TAURI__?.core?.invoke) {
@@ -50,26 +54,10 @@
         return typeof trackId === 'string' && trackId.startsWith('local-');
     }
 
-    function updateRPC(force = false) {
-        const audioEl = document.getElementById('audio-player');
-        if (!audioEl) return;
-
-        const currentTrack = getCurrentTrackFromQueue();
-        if (!currentTrack) {
-            // No track in queue - clear RPC
-            if (Object.keys(lastState).length > 0) {
-                lastState = {};
-                invoke('clear_discord_presence', {}).catch(() => { });
-            }
-            return;
-        }
+    function buildCurrentState(currentTrack, audioEl) {
 
         const isPaused = audioEl.paused;
-        const currentSec = audioEl.currentTime || 0;
-        const totalSec = audioEl.duration || 0;
-
-        // Check if this is a local file
-        const isLocal = isLocalFile(currentTrack.id);
+        const isLocal = Boolean(currentTrack?.isLocal) || isLocalFile(currentTrack?.id);
 
         // Extract metadata
         const title = currentTrack.title || 'Unknown Track';
@@ -81,7 +69,7 @@
         const yearMatch = releaseDate.match(/^(\d{4})/);
         const year = yearMatch ? yearMatch[1] : '';
 
-        // Get cover image - prefer album cover, fallback to artist picture
+        // Get cover image — prefer album cover, fallback to logo
         let image = 'logo';
         const coverEl = document.querySelector('.now-playing-bar img.cover');
         if (coverEl && coverEl.src && coverEl.src.startsWith('http') && coverEl.src.length < 256) {
@@ -96,19 +84,53 @@
         const artistUrl = !isLocal && currentTrack.artist?.id ? `${baseUrl}/artist/${currentTrack.artist.id}` : '';
         const albumUrl = !isLocal && currentTrack.album?.id ? `${baseUrl}/album/${currentTrack.album.id}` : '';
 
-        const currentState = {
+        return {
             trackId: currentTrack.id,
-            title: title,
+            title,
             artist: artistName,
-            year: year,
+            year,
             album: albumName,
-            image: image,
-            isPaused: isPaused,
-            isLocal: isLocal,
-            trackUrl: trackUrl,
-            artistUrl: artistUrl,
-            albumUrl: albumUrl
+            image,
+            isPaused,
+            isLocal,
+            trackUrl,
+            artistUrl,
+            albumUrl,
         };
+    }
+
+    // Compute Discord unix-second timestamps from the audio element's current
+    // position. Both values are null when paused — Discord shows no progress bar.
+    function buildTimestamps(audioEl, isPaused) {
+        if (isPaused) return { startTimestamp: null, endTimestamp: null };
+
+        const currentSec = audioEl.currentTime * 1000 || 0;
+        const totalSec = audioEl.duration * 1000 || 0;
+
+        const startTimestamp = Math.floor(Date.now() - currentSec);
+        const endTimestamp = Math.floor(totalSec > 0 && isFinite(totalSec) && (totalSec - currentSec) > 0
+            ? Date.now() + totalSec - currentSec
+            : null);
+
+        return { startTimestamp, endTimestamp };
+    }
+
+    function updateRPC(force = false) {
+        const audioEl = document.getElementById('audio-player');
+        if (!audioEl) return;
+
+        const currentTrack = getCurrentTrackFromQueue();
+        if (!currentTrack) {
+            // No track in queue — clear RPC
+            if (Object.keys(lastState).length > 0) {
+                lastState = {};
+                invoke('clear_discord_presence', {}).catch(() => { });
+            }
+            return;
+        }
+
+        const currentState = buildCurrentState(currentTrack, audioEl);
+        if (!currentState) return;
 
         // Only update if track changed or play/pause state changed
         const trackChanged = lastState.trackId !== currentState.trackId;
@@ -120,38 +142,50 @@
 
         lastState = currentState;
 
-        clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(() => {
-            // Re-read current time to account for any playback during debounce
-            const finalCurrentSec = audioEl.currentTime || 0;
-            const finalTotalSec = audioEl.duration || 0;
+        // Destructure so all fields are in scope inside the setTimeout closure
+        const { title, artist, year, album, image, isPaused, isLocal,
+            trackUrl, artistUrl, albumUrl } = currentState;
+
+        // ── Throttle: hold the update and send only when 3s have elapsed ────
+        const elapsed = Date.now() - lastSentTime;
+        const delay = elapsed >= MIN_UPDATE_INTERVAL_MS
+            ? 0
+            : MIN_UPDATE_INTERVAL_MS - elapsed;
+
+        clearTimeout(pendingTimer);
+        pendingTimer = setTimeout(() => {
+            // Timestamps are computed here — at actual send time — for maximum accuracy.
+            const { startTimestamp, endTimestamp } = buildTimestamps(audioEl, isPaused);
+
 
             const payload = {
-                title: title,
-                artist: artistName,
-                year: year,
-                album: albumName,
-                image: image,
-                isPaused: isPaused,
-                isLocal: isLocal,
-                currentSec: finalCurrentSec,
-                totalSec: finalTotalSec,
-                trackUrl: trackUrl,
-                artistUrl: artistUrl,
-                albumUrl: albumUrl
+                title,
+                artist,
+                year,
+                album,
+                image,
+                isPaused,
+                isLocal,
+                startTimestamp,
+                endTimestamp,
+                trackUrl,
+                artistUrl,
+                albumUrl,
             };
 
             // Debug logging
             if (window.__DISCORD_RPC_DEBUG__) {
-                console.log('[Discord RPC] Sending payload:', JSON.stringify(payload, null, 2));
+                const held = elapsed >= MIN_UPDATE_INTERVAL_MS ? 'immediate' : `${MIN_UPDATE_INTERVAL_MS - elapsed}ms hold`;
+                console.log(`[Discord RPC] Sending after ${held}`);
+                console.log('[Discord RPC] Payload:', JSON.stringify(payload, null, 2));
             }
 
             invoke('update_discord_presence', payload).catch(() => { });
 
-            // Store the time we sent this update
-            lastAudioTime = finalCurrentSec;
-            lastUpdateTime = Date.now();
-        }, 300);
+            lastAudioTime = audioEl.currentTime || 0;
+            lastSentTime = Date.now();
+            lastUpdateTime = lastSentTime;
+        }, delay);
     }
 
     // Sync RPC time periodically to handle hiccups/buffering
@@ -196,7 +230,8 @@
     let lastQueueString = '';
     function checkQueueChanges() {
         try {
-            const queueData = localStorage.getItem('monochrome-queue');
+            const currentTrack = getCurrentTrackFromQueue();
+            const queueData = currentTrack ? JSON.stringify(currentTrack) : '';
             if (queueData !== lastQueueString) {
                 lastQueueString = queueData;
                 // Queue changed - update immediately
@@ -233,7 +268,7 @@
         if (window.__DISCORD_RPC_DEBUG__) {
             console.log('[Discord RPC] Current state:', lastState);
             console.log('[Discord RPC] Current track from queue:', getCurrentTrackFromQueue());
-            console.log('[Discord RPC] To disable debug mode, run: toggleDiscordRPCDebug()');
+            console.log('[Discord RPC] To disable: toggleDiscordRPCDebug()');
         }
         return window.__DISCORD_RPC_DEBUG__;
     };

@@ -1,10 +1,8 @@
 use crate::{get_source_url, open_external, set_source_url};
-use discord_rich_presence::{DiscordIpc, DiscordIpcClient};
-use serde_json::json;
+use discord_rich_presence::{activity, DiscordIpc, DiscordIpcClient};
 use std::fs;
-use std::path::{PathBuf, Path};
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::image::Image;
 use tauri::menu::{MenuBuilder, MenuItemBuilder};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder};
@@ -18,7 +16,7 @@ use tauri_plugin_notification::NotificationExt;
 // ---------------------------------------------------------------------------
 
 struct DiscordState {
-    client: Mutex<Option<DiscordIpcClient>>,
+    client: Mutex<DiscordIpcClient>,
     last_song: Mutex<Option<String>>,
 }
 
@@ -52,6 +50,67 @@ fn load_download_path(app: &AppHandle) -> Option<PathBuf> {
     None
 }
 
+/// Builds a typed Discord `Activity`.
+fn build_activity<'a>(
+    title: &'a str,
+    state_text: &'a str,
+    image: &'a str,
+    album: &'a str,
+    is_local: bool,
+    is_paused: bool,
+    start_timestamp: Option<i64>,
+    end_timestamp: Option<i64>,
+    listen_url: &'a str,
+    track_url: &'a str,
+    artist_url: &'a str,
+    album_url: &'a str,
+) -> activity::Activity<'a> {
+    let local_note = "The current track is a local file \u{2014} links and artwork are unavailable";
+
+    // ── Assets ──────────────────────────────────────────────────────────────
+    let mut assets = activity::Assets::new().large_image(image).large_text(album);
+
+    if is_local {
+        assets = assets.small_image("logo").small_text(local_note);
+    } else if !album_url.is_empty() {
+        assets = assets.large_url(album_url);
+    }
+
+    // ── Core activity ────────────────────────────────────────────────────────
+    let mut act = activity::Activity::new()
+        .activity_type(activity::ActivityType::Listening)
+        .details(title)
+        .state(state_text)
+        .assets(assets)
+        .buttons(vec![activity::Button::new(
+            "Listen On Monochrome",
+            listen_url,
+        )]);
+
+    // Clickable URLs (non-local only)
+    if !is_local {
+        if !track_url.is_empty() {
+            act = act.details_url(track_url);
+        }
+        if !artist_url.is_empty() {
+            act = act.state_url(artist_url);
+        }
+    }
+
+    // ── Timestamps (only when playing; JS sends null when paused) ────────────
+    if !is_paused {
+        if let Some(start) = start_timestamp {
+            let mut ts = activity::Timestamps::new().start(start);
+            if let Some(end) = end_timestamp {
+                ts = ts.end(end);
+            }
+            act = act.timestamps(ts);
+        }
+    }
+
+    act
+}
+
 // ---------------------------------------------------------------------------
 // Tauri commands
 // ---------------------------------------------------------------------------
@@ -67,18 +126,13 @@ fn update_discord_presence(
     image: String,
     is_paused: bool,
     is_local: bool,
-    current_sec: f64,
-    total_sec: f64,
+    start_timestamp: Option<i64>,
+    end_timestamp: Option<i64>,
     track_url: String,
     artist_url: String,
     album_url: String,
 ) -> Result<(), String> {
-    let mut client_guard = state.client.lock().map_err(|_| "Failed to lock mutex")?;
-    let client = client_guard
-        .as_mut()
-        .ok_or("Discord client not initialized")?;
-
-    // Pad short strings for Discord API
+    // Pad short strings to satisfy Discord's 2-character minimum
     let title = if title.len() < 2 {
         format!("{}  ", title)
     } else {
@@ -87,7 +141,7 @@ fn update_discord_presence(
 
     // Build state string: "Artist • Year" or just "Artist"
     let mut state_text = if !year.is_empty() {
-        format!("{} • {}", artist, year)
+        format!("{} \u{2022} {}", artist, year)
     } else {
         artist.clone()
     };
@@ -100,79 +154,54 @@ fn update_discord_presence(
         state_text = format!("{} (Paused)", state_text);
     }
 
-    let mut activity = json!({
-        "type": 2,
-        "name": "music on Monochrome",
-        "status_display_type": 2,
-        "details": title,
-        "state": state_text,
-        "assets": {
-            "large_image": image,
-            "large_text": album
-        },
-        "buttons": [{
-                "label": "Listen On Monochrome",
-                "url": if !track_url.is_empty() { track_url.clone() } else { crate::load_source_url(&app) }
-            }]
-    });
+    let source_url = crate::load_source_url(&app);
+    let listen_url: &str = if !track_url.is_empty() {
+        &track_url
+    } else {
+        &source_url
+    };
 
-    // for local files, we can't have links or images, so note the limitation in the tooltip
-    if is_local {
-        activity["assets"]["small_image"] = json!("logo");
-        activity["assets"]["small_text"] = json!("The current track is a local file, so links and Image are unavailable");
-    }
+    let act = build_activity(
+        &title,
+        &state_text,
+        &image,
+        &album,
+        is_local,
+        is_paused,
+        start_timestamp,
+        end_timestamp,
+        listen_url,
+        &track_url,
+        &artist_url,
+        &album_url,
+    );
 
-    // Only add URLs for non-local files
-    if !is_local {
-        // Add clickable URLs
-        if !track_url.is_empty() {
-            activity["details_url"] = json!(track_url);
-        }
-        if !artist_url.is_empty() {
-            activity["state_url"] = json!(artist_url);
-        }
-        if !album_url.is_empty() {
-            activity["assets"]["large_url"] = json!(album_url);
-        }
-    }
+    // Debug: print what's being sent to Discord
+    // To activate this, uncomment the line below and ensure you have a console attached (e.g. by running `cargo tauri dev`).
+    // println!("[Discord RPC] Sending activity: title={:?}, artist={:?}, album={:?}, image={:?}, paused={}, is_local={}",title, state_text, album, image, is_paused, is_local);
 
-    if !is_paused {
-        let now = SystemTime::now();
-        let song_start = now - Duration::from_secs_f64(current_sec);
-        let start_timestamp = song_start.duration_since(UNIX_EPOCH).unwrap().as_secs() as i64;
+    let mut client_guard = state.client.lock().map_err(|_| "Failed to lock mutex")?;
 
-        // Calculate end timestamp if we have total duration
-        if total_sec > 0.0 && !total_sec.is_nan() && !total_sec.is_infinite() {
-            let remaining_sec = total_sec - current_sec;
-            if remaining_sec > 0.0 {
-                let song_end = now + Duration::from_secs_f64(remaining_sec);
-                let end_timestamp = song_end.duration_since(UNIX_EPOCH).unwrap().as_secs() as i64;
-
-                activity["timestamps"] = json!({
-                    "start": start_timestamp,
-                    "end": end_timestamp
-                });
-            } else {
-                // Song is at or past the end - just show elapsed
-                activity["timestamps"] = json!({
-                    "start": start_timestamp
-                });
-            }
+    if let Err(e) = client_guard.set_activity(act.clone()) {
+        let _ = client_guard.close();
+        if client_guard.connect().is_ok() {
+            client_guard
+                .set_activity(act)
+                .map_err(|e2| format!("Failed to reconnect to Discord: {} / {}", e, e2))?;
         } else {
-            // If no duration, just show elapsed time
-            activity["timestamps"] = json!({
-                "start": start_timestamp
-            });
+            return Err(format!("Failed to connect to Discord: {}", e));
         }
+    }
 
+    // Notification on track change (only while playing)
+    if !is_paused {
         let mut last_song_guard = state.last_song.lock().unwrap();
         let current_song_key = format!("{} - {}", title, artist);
 
         if last_song_guard.as_deref() != Some(&current_song_key) {
             *last_song_guard = Some(current_song_key);
 
-            let window = app.get_webview_window("main");
-            if let Some(win) = window {
+            if let Some(win) = app.get_webview_window("main") {
                 if !win.is_focused().unwrap_or(false) {
                     let _ = app
                         .notification()
@@ -185,55 +214,26 @@ fn update_discord_presence(
         }
     }
 
-    let payload = json!({
-        "cmd": "SET_ACTIVITY",
-        "args": {
-            "pid": std::process::id(),
-            "activity": activity
-        },
-        "nonce": format!("{}", SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis())
-    });
-
-    if let Err(e) = client.send(payload.clone(), 1) {
-        let _ = client.close();
-        if client.connect().is_ok() {
-            client.send(payload, 1).map_err(|e| e.to_string())?;
-        } else {
-            return Err(format!("Failed to connect to Discord: {}", e));
-        }
-    }
-
     Ok(())
 }
 
 #[tauri::command]
 fn clear_discord_presence(state: tauri::State<DiscordState>) -> Result<(), String> {
     let mut client_guard = state.client.lock().map_err(|_| "Failed to lock mutex")?;
-    let client = client_guard
-        .as_mut()
-        .ok_or("Discord client not initialized")?;
 
-    let payload = json!({
-        "cmd": "SET_ACTIVITY",
-        "args": {
-            "pid": std::process::id(),
-            "activity": null
-        },
-        "nonce": format!("{}", SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis())
-    });
-
-    if let Err(e) = client.send(payload.clone(), 1) {
-        let _ = client.close();
-        if client.connect().is_ok() {
-            client.send(payload, 1).map_err(|e| e.to_string())?;
+    if let Err(e) = client_guard.clear_activity() {
+        let _ = client_guard.close();
+        if client_guard.connect().is_ok() {
+            client_guard
+                .clear_activity()
+                .map_err(|e2| format!("Failed to reconnect to Discord: {} / {}", e, e2))?;
         } else {
             return Err(format!("Failed to connect to Discord: {}", e));
         }
     }
 
     // Clear last song tracking
-    let mut last_song_guard = state.last_song.lock().unwrap();
-    *last_song_guard = None;
+    *state.last_song.lock().unwrap() = None;
 
     Ok(())
 }
@@ -244,10 +244,10 @@ fn clear_discord_presence(state: tauri::State<DiscordState>) -> Result<(), Strin
 
 pub fn configure(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri::Wry> {
     let client_id = "1495102913356501082";
-    let mut client = DiscordIpcClient::new(client_id).ok();
-    if let Some(c) = &mut client {
-        let _ = c.connect();
-    }
+
+    // DiscordIpcClient::new is infallible in v1.x; connect separately.
+    let mut client = DiscordIpcClient::new(client_id);
+    let _ = client.connect();
 
     builder
         .plugin(tauri_plugin_dialog::init())
@@ -369,6 +369,7 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         .replace("__EXPECTED_URL__", &source_url)
         .replace("__DEFAULT_URL__", crate::DEFAULT_SOURCE_URL);
     init_script.push_str(&fallback_script);
+
     let window = WebviewWindowBuilder::new(
         app,
         "main",
