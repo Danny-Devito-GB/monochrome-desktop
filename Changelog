@@ -11,6 +11,18 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ---
 
+## [1.0.1] — 2026
+
+### Added
+- Regex validation for track, artist, and album IDs before constructing Discord presence URLs, based on Wikidata format constraints (P4578, P4576, P4577)
+
+### Changed
+- Album art in Discord Rich Presence is now built from the TIDAL CDN using the album cover UUID instead of scraping an `<img>` element from the DOM
+- Local file tracks now read TIDAL metadata (cover art, IDs, URLs) from a `tidalData` field on the track object, so Discord Rich Presence works correctly for locally matched tracks
+- `build_activity` and `update_discord_presence` in `desktop.rs` now take `ActivityParams` and `PresencePayload` structs instead of individual arguments
+
+---
+
 ## [1.0.0] — 2026
 
 ### Added

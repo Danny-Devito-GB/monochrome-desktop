@@ -30,6 +30,10 @@
         });
     }
 
+    // -------------------------------------------------------------------------
+    // Queue
+    // -------------------------------------------------------------------------
+
     function getCurrentTrackFromQueue() {
         try {
             const queueData = localStorage.getItem('monochrome-queue');
@@ -49,15 +53,20 @@
         }
     }
 
-    function isLocalFile(trackId) {
-        // Local files have IDs that start with "local-"
-        return typeof trackId === 'string' && trackId.startsWith('local-');
-    }
+    // ---------------------------------------------------------------------------
+    // State building
+    // ---------------------------------------------------------------------------
 
     function buildCurrentState(currentTrack, audioEl) {
 
         const isPaused = audioEl.paused;
-        const isLocal = Boolean(currentTrack?.isLocal) || isLocalFile(currentTrack?.id);
+        const isLocal = Boolean(currentTrack?.isLocal);
+
+        // Determine Tidal IDs based on source type
+        const trackId = isLocal ? currentTrack?.tidalData?.id || '' : currentTrack?.id || '';
+        const artistId = isLocal ? currentTrack?.tidalData?.artist?.id || '' : currentTrack?.artist?.id || '';
+        const albumId = isLocal ? currentTrack?.tidalData?.album?.id || '' : currentTrack?.album?.id || '';
+        const coverId = isLocal ? currentTrack?.tidalData?.album?.cover || '' : currentTrack?.album?.cover || '';
 
         // Extract metadata
         const title = currentTrack.title || 'Unknown Track';
@@ -69,23 +78,27 @@
         const yearMatch = releaseDate.match(/^(\d{4})/);
         const year = yearMatch ? yearMatch[1] : '';
 
-        // Get cover image — prefer album cover, fallback to logo
-        let image = 'logo';
-        const coverEl = document.querySelector('.now-playing-bar img.cover');
-        if (coverEl && coverEl.src && coverEl.src.startsWith('http') && coverEl.src.length < 256) {
-            image = coverEl.src;
+        // Determine the cover image URL for the track 
+        let image = isLocal ? 'local' : 'logo';
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (coverId) {
+            if (coverId.length < 256 && coverId.startsWith('http')) {    // Valid URL cover ID
+                image = coverId;
+            } else if (uuidRegex.test(coverId)) {   // UUID cover ID - construct URL
+                const size = 320;   // Desired image size (can be 80, 160, 320, 640, or 1280)
+                const formattedId = String(coverId).replace(/-/g, '/');
+                image = `https://resources.tidal.com/images/${formattedId}/${size}x${size}.jpg`;
+            }
         }
-        else if (isLocal) { image = 'local'; }
 
-
-        // Build URLs only for non-local files
+        // Build URLs for track, artist, and album pages
         const baseUrl = window.location.origin;
-        const trackUrl = !isLocal && currentTrack.id ? `${baseUrl}/track/${currentTrack.id}` : '';
-        const artistUrl = !isLocal && currentTrack.artist?.id ? `${baseUrl}/artist/${currentTrack.artist.id}` : '';
-        const albumUrl = !isLocal && currentTrack.album?.id ? `${baseUrl}/album/${currentTrack.album.id}` : '';
+        const trackUrl = trackId && /^[1-9]\d+$/.test(trackId) ? `${baseUrl}/track/${trackId}` : '';
+        const artistUrl = artistId && /^[1-9]\d*$/.test(artistId) ? `${baseUrl}/artist/${artistId}` : '';
+        const albumUrl = albumId && /^\d+$/.test(albumId) ? `${baseUrl}/album/${albumId}` : '';
 
         return {
-            trackId: currentTrack.id,
+            trackId,
             title,
             artist: artistName,
             year,
@@ -96,11 +109,14 @@
             trackUrl,
             artistUrl,
             albumUrl,
+            baseUrl,
         };
     }
 
-    // Compute Discord unix-second timestamps from the audio element's current
-    // position. Both values are null when paused — Discord shows no progress bar.
+    // ---------------------------------------------------------------------------
+    // Timestamps
+    // ---------------------------------------------------------------------------
+
     function buildTimestamps(audioEl, isPaused) {
         if (isPaused) return { startTimestamp: null, endTimestamp: null };
 
@@ -114,6 +130,10 @@
 
         return { startTimestamp, endTimestamp };
     }
+
+    // ---------------------------------------------------------------------------
+    // RPC update
+    // ---------------------------------------------------------------------------
 
     function updateRPC(force = false) {
         const audioEl = document.getElementById('audio-player');
@@ -144,7 +164,7 @@
 
         // Destructure so all fields are in scope inside the setTimeout closure
         const { title, artist, year, album, image, isPaused, isLocal,
-            trackUrl, artistUrl, albumUrl } = currentState;
+            trackUrl, artistUrl, albumUrl, baseUrl } = currentState;
 
         // ── Throttle: hold the update and send only when 3s have elapsed ────
         const elapsed = Date.now() - lastSentTime;
@@ -171,6 +191,7 @@
                 trackUrl,
                 artistUrl,
                 albumUrl,
+                baseUrl,
             };
 
             // Debug logging
@@ -180,15 +201,17 @@
                 console.log('[Discord RPC] Payload:', JSON.stringify(payload, null, 2));
             }
 
-            invoke('update_discord_presence', payload).catch(() => { });
-
+            invoke('update_discord_presence', { payload }).catch(() => { });
             lastAudioTime = audioEl.currentTime || 0;
             lastSentTime = Date.now();
             lastUpdateTime = lastSentTime;
         }, delay);
     }
 
-    // Sync RPC time periodically to handle hiccups/buffering
+    // ---------------------------------------------------------------------------
+    // Drift detection
+    // ---------------------------------------------------------------------------
+
     function syncRPCTime() {
         const audioEl = document.getElementById('audio-player');
         if (!audioEl || audioEl.paused || !lastState.trackId) return;
@@ -208,6 +231,10 @@
         }
     }
 
+    // ---------------------------------------------------------------------------
+    // Audio listeners
+    // ---------------------------------------------------------------------------
+
     function attachAudioListeners() {
         const audio = document.getElementById('audio-player');
         if (audio && !audio.dataset.rpcAttached) {
@@ -226,7 +253,10 @@
         }
     }
 
-    // Listen for queue changes (track switches)
+    // ---------------------------------------------------------------------------
+    // Queue polling
+    // ---------------------------------------------------------------------------
+
     let lastQueueString = '';
     function checkQueueChanges() {
         try {
@@ -239,6 +269,10 @@
             }
         } catch (e) { }
     }
+
+    // ---------------------------------------------------------------------------
+    // Init
+    // ---------------------------------------------------------------------------
 
     function initializeWatcher() {
         attachAudioListeners();
@@ -261,7 +295,10 @@
     // Re-init periodically as fallback
     setInterval(initializeWatcher, 10000);
 
-    // Global function to toggle debug mode
+    // ---------------------------------------------------------------------------
+    // Debug helpers
+    // ---------------------------------------------------------------------------
+
     window.toggleDiscordRPCDebug = function () {
         window.__DISCORD_RPC_DEBUG__ = !window.__DISCORD_RPC_DEBUG__;
         console.log('[Discord RPC] Debug mode:', window.__DISCORD_RPC_DEBUG__ ? 'ENABLED' : 'DISABLED');

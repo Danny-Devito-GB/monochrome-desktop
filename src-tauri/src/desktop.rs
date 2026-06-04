@@ -25,6 +25,43 @@ struct DownloadState {
 }
 
 // ---------------------------------------------------------------------------
+// Payload / parameter structs
+// ---------------------------------------------------------------------------
+/// Deserialized from the JS invoke call.
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PresencePayload {
+    title: String,
+    artist: String,
+    year: String,
+    album: String,
+    image: String,
+    is_paused: bool,
+    is_local: bool,
+    start_timestamp: Option<i64>,
+    end_timestamp: Option<i64>,
+    track_url: String,
+    artist_url: String,
+    album_url: String,
+    base_url: String,
+}
+/// Internal parameter bundle passed to `build_activity`.
+struct ActivityParams<'a> {
+    title: &'a str,
+    state_text: &'a str,
+    image: &'a str,
+    album: &'a str,
+    is_local: bool,
+    is_paused: bool,
+    start_timestamp: Option<i64>,
+    end_timestamp: Option<i64>,
+    listen_url: &'a str,
+    track_url: &'a str,
+    artist_url: &'a str,
+    album_url: &'a str,
+}
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -51,57 +88,47 @@ fn load_download_path(app: &AppHandle) -> Option<PathBuf> {
 }
 
 /// Builds a typed Discord `Activity`.
-fn build_activity<'a>(
-    title: &'a str,
-    state_text: &'a str,
-    image: &'a str,
-    album: &'a str,
-    is_local: bool,
-    is_paused: bool,
-    start_timestamp: Option<i64>,
-    end_timestamp: Option<i64>,
-    listen_url: &'a str,
-    track_url: &'a str,
-    artist_url: &'a str,
-    album_url: &'a str,
-) -> activity::Activity<'a> {
-    let local_note = "The current track is a local file \u{2014} links and artwork are unavailable";
+fn build_activity(p: ActivityParams<'_>) -> activity::Activity<'_> {
+    let local_note =
+        "The current track is a local file \u{2014} links and artwork may be unavailable";
 
     // ── Assets ──────────────────────────────────────────────────────────────
-    let mut assets = activity::Assets::new().large_image(image).large_text(album);
+    let mut assets = activity::Assets::new()
+        .large_image(p.image)
+        .large_text(p.album);
 
-    if is_local {
+    if p.is_local {
         assets = assets.small_image("logo").small_text(local_note);
-    } else if !album_url.is_empty() {
-        assets = assets.large_url(album_url);
+    }
+
+    if !p.album_url.is_empty() {
+        assets = assets.large_url(p.album_url);
     }
 
     // ── Core activity ────────────────────────────────────────────────────────
     let mut act = activity::Activity::new()
         .activity_type(activity::ActivityType::Listening)
-        .details(title)
-        .state(state_text)
+        .details(p.title)
+        .state(p.state_text)
         .assets(assets)
         .buttons(vec![activity::Button::new(
             "Listen On Monochrome",
-            listen_url,
+            p.listen_url,
         )]);
 
-    // Clickable URLs (non-local only)
-    if !is_local {
-        if !track_url.is_empty() {
-            act = act.details_url(track_url);
-        }
-        if !artist_url.is_empty() {
-            act = act.state_url(artist_url);
-        }
+    // Clickable URLs (only if valid URLs are provided)
+    if !p.track_url.is_empty() {
+        act = act.details_url(p.track_url);
+    }
+    if !p.artist_url.is_empty() {
+        act = act.state_url(p.artist_url);
     }
 
     // ── Timestamps (only when playing; JS sends null when paused) ────────────
-    if !is_paused {
-        if let Some(start) = start_timestamp {
+    if !p.is_paused {
+        if let Some(start) = p.start_timestamp {
             let mut ts = activity::Timestamps::new().start(start);
-            if let Some(end) = end_timestamp {
+            if let Some(end) = p.end_timestamp {
                 ts = ts.end(end);
             }
             act = act.timestamps(ts);
@@ -119,19 +146,24 @@ fn build_activity<'a>(
 fn update_discord_presence(
     app: AppHandle,
     state: tauri::State<DiscordState>,
-    title: String,
-    artist: String,
-    year: String,
-    album: String,
-    image: String,
-    is_paused: bool,
-    is_local: bool,
-    start_timestamp: Option<i64>,
-    end_timestamp: Option<i64>,
-    track_url: String,
-    artist_url: String,
-    album_url: String,
+    payload: PresencePayload,
 ) -> Result<(), String> {
+    let PresencePayload {
+        title,
+        artist,
+        year,
+        album,
+        image,
+        is_paused,
+        is_local,
+        start_timestamp,
+        end_timestamp,
+        track_url,
+        artist_url,
+        album_url,
+        base_url,
+    } = payload;
+
     // Pad short strings to satisfy Discord's 2-character minimum
     let title = if title.len() < 2 {
         format!("{}  ", title)
@@ -154,27 +186,26 @@ fn update_discord_presence(
         state_text = format!("{} (Paused)", state_text);
     }
 
-    let source_url = crate::load_source_url(&app);
     let listen_url: &str = if !track_url.is_empty() {
         &track_url
     } else {
-        &source_url
+        &base_url
     };
 
-    let act = build_activity(
-        &title,
-        &state_text,
-        &image,
-        &album,
+    let act = build_activity(ActivityParams {
+        title: &title,
+        state_text: &state_text,
+        image: &image,
+        album: &album,
         is_local,
         is_paused,
         start_timestamp,
         end_timestamp,
         listen_url,
-        &track_url,
-        &artist_url,
-        &album_url,
-    );
+        track_url: &track_url,
+        artist_url: &artist_url,
+        album_url: &album_url,
+    });
 
     // Debug: print what's being sent to Discord
     // To activate this, uncomment the line below and ensure you have a console attached (e.g. by running `cargo tauri dev`).
