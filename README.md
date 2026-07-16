@@ -61,6 +61,7 @@ The app will launch pointing at `https://monochrome.tf/library` by default. To d
 ### Building a release
 
 ```cmd
+npm install
 npm run build
 ```
 
