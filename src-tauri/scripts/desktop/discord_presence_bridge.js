@@ -1,4 +1,9 @@
 (function () {
+    if (!window.__TAURI__?.core?.invoke) {
+        // stops the script from running outside the desktop app
+        return;
+    }
+
     if (window.discordRpcInjected) {
         return;
     }
@@ -15,13 +20,10 @@
     const MIN_UPDATE_INTERVAL_MS = 10000; // Minimum time between updates to avoid hitting rate limits
 
     function invoke(cmd, args) {
-        if (window.__TAURI__?.core?.invoke) {
-            return window.__TAURI__.core.invoke(cmd, args);
-        }
-        return Promise.reject("Tauri API not found");
+        return window.__TAURI__.core.invoke(cmd, args);
     }
 
-    if (window.__TAURI__?.event?.listen) {
+    if (window.__TAURI__.event?.listen) {
         window.__TAURI__.event.listen('media-toggle', () => {
             const audio = document.getElementById('audio-player');
             if (audio) {
@@ -82,9 +84,9 @@
         let image = isLocal ? 'local' : 'logo';
         const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
         if (coverId) {
-            if (coverId.length < 256 && coverId.startsWith('http')) {    // Valid URL cover ID
+            if (coverId.length < 256 && coverId.startsWith('http')) {
                 image = coverId;
-            } else if (uuidRegex.test(coverId)) {   // UUID cover ID - construct URL
+            } else if (uuidRegex.test(coverId)) {
                 const size = 320;   // Desired image size (can be 80, 160, 320, 640, or 1280)
                 const formattedId = String(coverId).replace(/-/g, '/');
                 image = `https://resources.tidal.com/images/${formattedId}/${size}x${size}.jpg`;
@@ -120,12 +122,12 @@
     function buildTimestamps(audioEl, isPaused) {
         if (isPaused) return { startTimestamp: null, endTimestamp: null };
 
-        const currentSec = audioEl.currentTime * 1000 || 0;
-        const totalSec = audioEl.duration * 1000 || 0;
+        const currentMs = audioEl.currentTime * 1000 || 0;
+        const totalMs = audioEl.duration * 1000 || 0;
 
-        const startTimestamp = Math.floor(Date.now() - currentSec);
-        const endTimestamp = Math.floor(totalSec > 0 && isFinite(totalSec) && (totalSec - currentSec) > 0
-            ? Date.now() + totalSec - currentSec
+        const startTimestamp = Math.floor(Date.now() - currentMs);
+        const endTimestamp = Math.floor(totalMs > 0 && isFinite(totalMs) && (totalMs - currentMs) > 0
+            ? Date.now() + totalMs - currentMs
             : null);
 
         return { startTimestamp, endTimestamp };
@@ -150,7 +152,6 @@
         }
 
         const currentState = buildCurrentState(currentTrack, audioEl);
-        if (!currentState) return;
 
         // Only update if track changed or play/pause state changed
         const trackChanged = lastState.trackId !== currentState.trackId;
@@ -168,9 +169,7 @@
 
         // ── Throttle: hold the update and send only when 3s have elapsed ────
         const elapsed = Date.now() - lastSentTime;
-        const delay = elapsed >= MIN_UPDATE_INTERVAL_MS
-            ? 0
-            : MIN_UPDATE_INTERVAL_MS - elapsed;
+        const delay = elapsed >= MIN_UPDATE_INTERVAL_MS ? 0 : MIN_UPDATE_INTERVAL_MS - elapsed;
 
         clearTimeout(pendingTimer);
         pendingTimer = setTimeout(() => {
