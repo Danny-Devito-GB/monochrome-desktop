@@ -390,9 +390,11 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let app_handle = app.handle().clone();
     let source_url = crate::load_source_url(app.handle());
     let mut init_script = String::new();
-    init_script.push_str(include_str!(
-        "../scripts/desktop/discord_presence_bridge.js"
-    ));
+    // Commenting out the discord presence bridge script for now, as I've pushed it to the monochrome source
+    // init_script.push_str(include_str!(
+    //     "../scripts/desktop/discord_presence_bridge.js"
+    // ));
+    init_script.push_str("document.addEventListener('contextmenu', e => e.preventDefault());");
     init_script.push('\n');
     init_script.push_str(include_str!("../scripts/desktop/external_link_router.js"));
     init_script.push('\n');
