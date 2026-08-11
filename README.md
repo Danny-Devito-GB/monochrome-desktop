@@ -1,8 +1,8 @@
-# Monochrome
+# Monochrome-Desktop
 
 > Minimalist, unlimited music streaming — desktop client for Windows.
 
-Monochrome is a lightweight desktop wrapper for [monochrome.tf](https://monochrome.tf), built with Tauri v2. It adds native Windows integration on top of the web app: system tray, Discord Rich Presence, media key support, desktop notifications, and a custom download folder picker.
+Monochrome-Desktop is a lightweight desktop wrapper for [monochrome.tf](https://github.com/monochrome-music/monochrome), built with Tauri v2. It adds native Windows integration on top of the web app: system tray, Discord Rich Presence, media key support, desktop notifications, and a custom download folder picker.
 
 ---
 
@@ -52,11 +52,13 @@ cd monochrome
 Or manually:
 
 ```cmd
+git clone https://github.com/Muhammad5777/monochrome-desktop.git
+cd monochrome
 npm install
 npm run dev
 ```
 
-The app will launch pointing at `https://monochrome.tf/library` by default. To develop against a local frontend, update `devUrl` in `src-tauri/tauri.conf.json`.
+The app will launch pointing at `https://monochrome.tf/` by default. To develop against a local frontend, update `devUrl` in `src-tauri/tauri.conf.json`.
 
 ### Building a release
 
@@ -68,15 +70,6 @@ npm run build
 Outputs:
 - `src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi`
 - `src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe`
-
----
-
-## Tech stack
-
-- [Tauri v2](https://tauri.app) — Rust backend + WebView2 frontend
-- [discord-rich-presence](https://crates.io/crates/discord-rich-presence) — Discord IPC
-- [tauri-plugin-google-auth](https://crates.io/crates/tauri-plugin-google-auth) — Google OAuth
-- [tauri-plugin-window-state](https://crates.io/crates/tauri-plugin-window-state) — persisted window size/position
 
 ---
 
