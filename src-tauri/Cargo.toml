@@ -1,6 +1,6 @@
 [package]
 name = "Monochrome"
-version = "0.1.0"
+version = "1.1.0"
 description = "Minimalist, Unlimited Music Streaming."
 authors = ["Samidy", "Blacksigkill"]
 edition = "2021"
@@ -24,6 +24,7 @@ tauri-plugin-window-state = "2"
 url = "2"
 discord-rich-presence = "1.1.0"
 serde = { version = "1", features = ["derive"] }
+tauri-plugin-autostart = "2"
 
 [features]
 cargo-clippy = []

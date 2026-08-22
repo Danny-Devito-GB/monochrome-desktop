@@ -4,9 +4,11 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use tauri::image::Image;
+use tauri::menu::CheckMenuItemBuilder;
 use tauri::menu::{MenuBuilder, MenuItemBuilder};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder};
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri_plugin_autostart::ManagerExt;
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 use tauri_plugin_notification::NotificationExt;
@@ -293,6 +295,10 @@ pub fn configure(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri::W
                 }
             },
         ))
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
         .manage(DiscordState {
             client: Mutex::new(client),
             last_song: Mutex::new(None),
@@ -326,10 +332,17 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     // System tray
     let quit = MenuItemBuilder::with_id("quit", "Quit Monochrome").build(app)?;
     let show = MenuItemBuilder::with_id("show", "Show Player").build(app)?;
+    let autostart_manager = app.autolaunch();
+    let is_enabled = autostart_manager.is_enabled().unwrap_or(false);
+    let launch_at_startup = CheckMenuItemBuilder::with_id("launch_at_startup", "Launch at Startup")
+        .checked(is_enabled)
+        .build(app)?;
     let change_dl = MenuItemBuilder::with_id("change_dl", "Set Download Folder").build(app)?;
     let menu = MenuBuilder::new(app)
         .item(&show)
         .item(&change_dl)
+        .separator()
+        .item(&launch_at_startup)
         .separator()
         .item(&quit)
         .build()?;
@@ -356,6 +369,14 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                         save_download_path(&app_handle, &path);
                     }
                 });
+            }
+            "launch_at_startup" => {
+                let manager = app.autolaunch();
+                if manager.is_enabled().unwrap_or(false) {
+                    let _ = manager.disable();
+                } else {
+                    let _ = manager.enable();
+                }
             }
             _ => {}
         })
