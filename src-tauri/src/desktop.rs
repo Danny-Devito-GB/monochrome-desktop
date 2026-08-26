@@ -417,6 +417,13 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     init_script.push('\n');
     init_script.push_str(include_str!("../scripts/desktop/external_link_router.js"));
     init_script.push('\n');
+    init_script.push_str(include_str!("../scripts/desktop/intent_override.js"));
+    init_script.push('\n');
+    #[cfg(target_os = "linux")]
+    {
+        init_script.push_str(include_str!("../scripts/desktop/linux_exclusive_script.js"));
+        init_script.push('\n');
+    }
     let fallback_script = include_str!("../scripts/desktop/source_url_fallback.js")
         .replace("__EXPECTED_URL__", &source_url)
         .replace("__DEFAULT_URL__", crate::DEFAULT_SOURCE_URL);

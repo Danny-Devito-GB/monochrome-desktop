@@ -40,3 +40,26 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - External link router — opens `_blank` and off-origin links in the system browser
 - Windows installer bundles: `.msi` (WiX) and `.exe` (NSIS)
 - GitHub Actions CI workflow for automated Windows builds and draft releases
+
+---
+
+## [1.1.0] (2026)
+
+### Added
+- Linux support: desktop client now builds and runs on Linux via WebKitGTK, alongside the existing Windows build
+- `.deb` and `.AppImage` bundle targets for Linux, with package metadata (category, short/long description, `deb` section and priority)
+- "Launch at Startup" toggle in the system tray menu, backed by `tauri-plugin-autostart`, reflecting the current autostart state
+- Linux app icons (32x32, 64x64, 128x128, 128x128@2x) plus new `icon.svg` / `logo.svg` source assets
+- GitHub Actions CI now builds both Windows and Linux artifacts in a matrix job, installing the required WebKitGTK/GTK system dependencies on the Linux runner
+
+### Changed
+- README updated with Linux prerequisites and build/run instructions
+- CI workflow renamed from "Windows Desktop Build" to "Desktop Build" to reflect multi-platform builds
+
+---
+
+## [1.1.1] (2026)
+
+### Added
+- Keyboard-triggered page refresh (F5 / Ctrl+R) on Linux via `linux_exclusive_script.js`, working around WebKitGTK's lack of a native reload shortcut
+- `intent_override.js`: rewrites outgoing `fetch` requests, forcing track URLs from `intent=stream` to `intent=download`
