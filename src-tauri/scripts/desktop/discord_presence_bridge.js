@@ -23,16 +23,6 @@
         return window.__TAURI__.core.invoke(cmd, args);
     }
 
-    if (window.__TAURI__.event?.listen) {
-        window.__TAURI__.event.listen('media-toggle', () => {
-            const audio = document.getElementById('audio-player');
-            if (audio) {
-                if (audio.paused) audio.play();
-                else audio.pause();
-            }
-        });
-    }
-
     // -------------------------------------------------------------------------
     // Queue
     // -------------------------------------------------------------------------

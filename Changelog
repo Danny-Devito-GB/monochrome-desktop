@@ -63,3 +63,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 ### Added
 - Keyboard-triggered page refresh (F5 / Ctrl+R) on Linux via `linux_exclusive_script.js`, working around WebKitGTK's lack of a native reload shortcut
 - `intent_override.js`: rewrites outgoing `fetch` requests, forcing track URLs from `intent=stream` to `intent=download`
+
+---
+
+## [1.1.2] (2026)
+
+### Changed
+- Removed `tauri_plugin_global_shortcut` because WebView already handles that through `Media Session API`.

@@ -7,10 +7,9 @@ use tauri::image::Image;
 use tauri::menu::CheckMenuItemBuilder;
 use tauri::menu::{MenuBuilder, MenuItemBuilder};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder};
-use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_autostart::ManagerExt;
 use tauri_plugin_dialog::DialogExt;
-use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 use tauri_plugin_notification::NotificationExt;
 
 // ---------------------------------------------------------------------------
@@ -286,7 +285,6 @@ pub fn configure(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri::W
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_single_instance::init(
             |app: &AppHandle, _args, _cwd| {
                 if let Some(window) = app.get_webview_window("main") {
@@ -397,15 +395,6 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
             }
         })
         .build(app)?;
-
-    // Global media key shortcut
-    let _ = app
-        .global_shortcut()
-        .on_shortcut("MediaPlayPause", |app, _shortcut, event| {
-            if event.state == ShortcutState::Released {
-                let _ = app.emit("media-toggle", ());
-            }
-        });
 
     // Main window
     let app_handle = app.handle().clone();
