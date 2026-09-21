@@ -2,7 +2,7 @@
 
 > Minimalist, unlimited music streaming — desktop client for Windows and Linux.
 
-Monochrome-Desktop is a lightweight desktop wrapper for [monochrome.tf](https://github.com/monochrome-music/monochrome), built with Tauri v2. It adds native desktop integration on top of the web app: system tray, Discord Rich Presence, media key support, desktop notifications, launch-at-startup, and a custom download folder picker.
+Monochrome-Desktop is a lightweight desktop wrapper for [monochrome.st](https://github.com/monochrome-music/monochrome), built with Tauri v2. It adds native desktop integration on top of the web app: system tray, Discord Rich Presence, media key support, desktop notifications, launch-at-startup, and a custom download folder picker.
 
 ---
 
@@ -27,7 +27,7 @@ Grab the latest installer from [**Releases**](../../releases/latest).
 
 ## Features
 
-- Streams from [monochrome.tf](https://monochrome.tf) with full native window chrome
+- Streams from [monochrome.st](https://monochrome.st) with full native window chrome
 - **Discord Rich Presence** — track title, artist, album art, and playback timestamps
 - **Media key support** — play/pause with your keyboard's media keys
 - **System tray** — minimize to tray, show/hide, set download folder
@@ -70,7 +70,7 @@ npm install
 npm run dev
 ```
 
-The app will launch pointing at `https://monochrome.tf/` by default. To develop against a local frontend, update `devUrl` in `src-tauri/tauri.conf.json`.
+The app will launch pointing at `https://monochrome.st/` by default. To develop against a local frontend, update `devUrl` in `src-tauri/tauri.conf.json`.
 
 ### Building a release
 

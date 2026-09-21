@@ -27,7 +27,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ### Added
 - Initial release of Monochrome desktop client for Windows
-- Tauri v2 wrapper for [monochrome.tf](https://monochrome.tf) with WebView2
+- Tauri v2 wrapper for [monochrome.st](https://monochrome.st) with WebView2
 - Discord Rich Presence — track title, artist, album art, playback timestamps, and clickable URLs
 - Media key support (play/pause via `MediaPlayPause` global shortcut)
 - System tray with show/hide, set download folder, and quit actions
@@ -70,3 +70,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ### Changed
 - Removed `tauri_plugin_global_shortcut` because WebView already handles that through `Media Session API`.
+
+---
+
+## [1.1.3] (2026)
+
+### Changed
+- Changed the remote source to [monochrome.st](https://monochrome.st/) from the old [monochrome.tf](https://monochrome.tf/).
