@@ -77,3 +77,14 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ### Changed
 - Changed the remote source to [monochrome.st](https://monochrome.st/) from the old [monochrome.tf](https://monochrome.tf/).
+
+---
+
+## [1.1.4] (2026)
+
+### Fixed
+- Linux: the window now uses the X11 backend by default, so KDE draws a normal titlebar instead of GTK's thick client-side one (an existing `GDK_BACKEND` is respected)
+- CI build failing because the `tauri` crate and `@tauri-apps/api` had mismatched versions
+
+### Changed
+- Updated Rust dependencies, including `tauri` 2.12.3, `tao` 0.37 and `wry` 0.57
